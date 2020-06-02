@@ -38,6 +38,10 @@ namespace virens
 
 			options.Validate ();
 
+			var buildInfos = await Builds.Create (options).FindGreenBuilds ();
+			foreach (var build in buildInfos.OrderBy (x => x.Branch)) {
+				Console.WriteLine ($"{build.Branch} - {build.Distance}");
+			}
 		}
 
 		static void ShowHelp (OptionSet os)

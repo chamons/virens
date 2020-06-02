@@ -10,14 +10,14 @@ using virens.Utilities;
 
 namespace virens.Requests
 {
-	public class Issues
+	public class Builds
 	{
 		GitHubClient Client;
 		RequestOptions Options;
 		string Owner;
 		string Area;
 
-		public Issues (RequestOptions options)
+		public Builds (RequestOptions options)
 		{
 			Options = options;
 			Client = new GitHubClient (new ProductHeaderValue ("chamons.virens"));
@@ -25,7 +25,7 @@ namespace virens.Requests
 			(Owner, Area) = ParseLocation (Options.Repository);
 		}
 
-		public static Issues Create (RequestOptions options) => new Issues (options);
+		public static Builds Create (RequestOptions options) => new Builds (options);
 
 		public async Task AssertLimits ()
 		{
@@ -44,8 +44,35 @@ namespace virens.Requests
 			return (bits[0], bits[1]);
 		}
 
-		public async Task Find ()
+		public async Task<List<BuildInfo>> FindGreenBuilds ()
 		{
+			var builds = new List<BuildInfo> ();
+			foreach (var branchName in Options.Branch) {
+				var branch = await Client.Repository.Branch.Get (Owner, Area, branchName);
+
+				var commit = branch.Commit.Sha;
+				int count = 0;
+				while (true) {
+					bool passed = await CheckBuild (commit);
+					if (passed) {
+						builds.Add (new BuildInfo (branchName, count));
+						break;
+					}
+					count++;
+
+					var commitInfo = await Client.Repository.Commit.Get (Owner, Area, commit);
+					// HACK - We only follow the first parent in merge commits
+					commit = commitInfo.Parents.First ().Sha;
+				}
+			}
+			return builds;
+		}
+
+		async Task<bool> CheckBuild (string sha)
+		{
+			var status = await Client.Repository.Status.GetCombined (Owner, Area, sha);
+			return status.Statuses.All (x =>
+				x.State.TryParse (out CommitState state) && state == CommitState.Success);
 		}
 	}
 }
